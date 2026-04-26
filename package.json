@@ -1,6 +1,6 @@
 {
-  "name": "@msr0806/opencode-key-model-router",
-  "version": "0.1.2",
+  "name": "opencode-key-model-router",
+  "version": "0.1.3",
   "description": "OpenCode plugin: prefix a message with @key to pick a model, strip the tag, and persist the choice for the session",
   "keywords": [
     "opencode",

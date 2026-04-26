@@ -1,4 +1,4 @@
-# @msr0806/opencode-key-model-router
+# opencode-key-model-router
 
 OpenCode plugin: include a short `sigil` + key anywhere in a user message to pick which `provider/model` OpenCode should use for that turn. The tag is removed before the text is sent to the model. The chosen model is remembered for the rest of the session until you use `@reset` or change the key again.
 
@@ -15,7 +15,7 @@ Add to `opencode.json`:
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "@msr0806/opencode-key-model-router",
+      "opencode-key-model-router",
       {
         "sigil": "@",
         "debug": false,
