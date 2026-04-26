@@ -17,39 +17,61 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function lookupKey(keys: Record<string, ModelRef>, raw: string): ModelRef | "reset" | undefined {
+function parseModelRef(model: string): ModelRef | undefined {
+  const slash = model.indexOf("/")
+  if (slash <= 0 || slash === model.length - 1) {
+    return undefined
+  }
+  return {
+    providerID: model.slice(0, slash),
+    modelID: model.slice(slash + 1),
+  }
+}
+
+function lookupKey(keys: Record<string, string>, raw: string): ModelRef | "reset" | "invalid" | undefined {
   const lower = raw.toLowerCase()
   if (isResetKey(lower)) {
     // Allow reset without adding to `keys` — always recognized after sigil
     return "reset"
   }
-  for (const [name, ref] of Object.entries(keys)) {
+  for (const [name, model] of Object.entries(keys)) {
     if (name.toLowerCase() === lower) {
-      return ref
+      return parseModelRef(model) ?? "invalid"
     }
   }
   return undefined
 }
 
-function stripFromFirstTextPart(parts: Part[], consumed: number): Part[] {
-  if (consumed === 0) {
+function stripFromText(text: string, start: number, end: number): string {
+  const before = text.slice(0, start)
+  const after = text.slice(end)
+  const beforeHasSpace = /\s$/.test(before)
+  const afterHasSpace = /^\s/.test(after)
+
+  if (beforeHasSpace && afterHasSpace) {
+    return before.replace(/\s+$/, " ") + after.replace(/^\s+/, "")
+  }
+  if (beforeHasSpace && /^[.,!?;:]/.test(after)) {
+    return before.replace(/\s+$/, "") + after
+  }
+  if (!before) {
+    return after.replace(/^\s+/, "")
+  }
+  if (!after) {
+    return before.replace(/\s+$/, "")
+  }
+  return before + after
+}
+
+function stripFromTextPart(parts: Part[], partID: string, start: number, end: number): Part[] {
+  if (start === end) {
     return parts
   }
-  const out: Part[] = []
-  let didStrip = false
-  for (const p of parts) {
-    if (!didStrip && p.type === "text") {
-      out.push({ ...p, text: p.text.slice(consumed) })
-      didStrip = true
-    } else {
-      out.push(p)
-    }
-  }
-  return out
+  return parts.map((p) => (p.type === "text" && p.id === partID ? { ...p, text: stripFromText(p.text, start, end) } : p))
 }
 
 export type ResolveOutcome =
-  | { kind: "none" } // Do not modify hook output
+  | { kind: "none"; detail: string } // Do not modify hook output
   | {
       kind: "apply"
       model: ModelRef
@@ -63,75 +85,77 @@ export type ResolveOutcome =
     }
 
 /**
- * - On `@key` with a configured mapping: store model, strip prefix, return model to set.
- * - On `@reset`: clear stored model, strip prefix, caller should set message.model to input.model.
+ * - On `@key` anywhere in a text part with a configured mapping: store model, strip the token, return model to set.
+ * - On `@reset` anywhere in a text part: clear stored model, strip the token, caller should set message.model to input.model.
  * - On `@unknown`: leave message unchanged (no strip).
- * - On message without a leading key: re-apply stored model if any; parts unchanged.
+ * - On message without a key: re-apply stored model if any; parts unchanged.
  */
 export function resolve(
   sessionID: string,
-  defaultModel: { providerID: string; modelID: string } | undefined,
   parts: Part[],
   cfg: RouterConfig,
 ): ResolveOutcome {
-  const first = parts.find((p): p is Part & { type: "text" } => p.type === "text")
-  if (!first) {
-    return applyOrPassthroughFromStore(sessionID, defaultModel, parts, cfg, "no text part")
-  }
-
   const sigil = cfg.sigil
-  if (!first.text.startsWith(sigil)) {
-    return applyOrPassthroughFromStore(sessionID, defaultModel, parts, cfg, "no sigil")
-  }
+  const re = new RegExp(`(^|\\s)${escapeRe(sigil)}([a-zA-Z0-9_]{2,32})(?=\\s|$|[.,!?;:])`)
 
-  const re = new RegExp(`^${escapeRe(sigil)}([a-zA-Z0-9_]{2,32})\\s*`)
-  const m = first.text.match(re)
-  if (!m) {
-    // Starts with sigil but not our key pattern — do not treat as a switch (e.g. "@ mention")
-    return { kind: "none" }
-  }
+  for (const part of parts) {
+    if (part.type !== "text") {
+      continue
+    }
+    const m = part.text.match(re)
+    if (!m || m.index === undefined) {
+      continue
+    }
 
-  const rawKey = m[1]
-  const found = lookupKey(cfg.keys, rawKey)
-  if (found === undefined) {
-    return { kind: "none" }
-  }
+    const rawKey = m[2]
+    const found = lookupKey(cfg.keys, rawKey)
+    if (found === undefined) {
+      return { kind: "none", detail: `unknown key ${rawKey.toLowerCase()}` }
+    }
+    if (found === "invalid") {
+      return { kind: "none", detail: `invalid model for key ${rawKey.toLowerCase()}` }
+    }
 
-  const consumed = m[0].length
+    const leading = m[1] ?? ""
+    const tokenStart = m.index + leading.length
+    const tokenEnd = tokenStart + sigil.length + rawKey.length
 
-  if (found === "reset") {
-    clearSession(sessionID)
+    if (found === "reset") {
+      clearSession(sessionID)
+      return {
+        kind: "revert",
+        parts: stripFromTextPart(parts, part.id, tokenStart, tokenEnd),
+        detail: "reset",
+      }
+    }
+
+    sessionStore.set(sessionID, found)
     return {
-      kind: "revert",
-      parts: stripFromFirstTextPart(parts, consumed),
-      detail: "reset",
+      kind: "apply",
+      model: found,
+      parts: stripFromTextPart(parts, part.id, tokenStart, tokenEnd),
+      detail: `key ${rawKey.toLowerCase()}`,
     }
   }
 
-  sessionStore.set(sessionID, found)
-  return {
-    kind: "apply",
-    model: found,
-    parts: stripFromFirstTextPart(parts, consumed),
-    detail: `key ${rawKey.toLowerCase()}`,
-  }
+  return applyOrPassthroughFromStore(sessionID, undefined, parts, cfg, "no configured key found")
 }
 
 function applyOrPassthroughFromStore(
   sessionID: string,
-  defaultModel: { providerID: string; modelID: string } | undefined,
+  _defaultModel: { providerID: string; modelID: string } | undefined,
   parts: Part[],
   _cfg: RouterConfig,
-  _reason: string,
+  reason: string,
 ): ResolveOutcome {
   const stored = sessionStore.get(sessionID)
   if (!stored) {
-    return { kind: "none" }
+    return { kind: "none", detail: reason }
   }
-  // Sticky: same model for subsequent turns
-  if (defaultModel && stored.providerID === defaultModel.providerID && stored.modelID === defaultModel.modelID) {
-    return { kind: "none" }
-  }
+  // Always re-apply the stored model on every subsequent turn.
+  // OpenCode's chat.message hook only affects the current turn's model;
+  // the TUI may send a different model in its PromptInput on turn 2+,
+  // so we must explicitly override on every turn to keep the choice sticky.
   return {
     kind: "apply",
     model: stored,

@@ -1,5 +1,3 @@
-import type { ModelRef } from "./types.js"
-
 export type RouterConfig = {
   /**
    * Prefix before the key, e.g. "@" for `@fast`.
@@ -9,19 +7,17 @@ export type RouterConfig = {
   /** If true, log routing decisions via OpenCode's structured logger */
   debug: boolean
   /**
-   * Map of key name (lowercase) → model. Keys are matched case-insensitively after the sigil.
+   * Map of key name (lowercase) -> OpenCode model string (`provider/model`).
+   * Keys are matched case-insensitively after the sigil.
    * Optional built-in: `reset` — clears sticky session model and reverts to OpenCode's default for this call.
    */
-  keys: Record<string, ModelRef>
+  keys: Record<string, string>
 }
 
 export const defaultConfig: RouterConfig = {
   sigil: "@",
   debug: false,
-  keys: {
-    fast: { providerID: "anthropic", modelID: "claude-3-5-haiku-20241022" },
-    pro: { providerID: "anthropic", modelID: "claude-opus-4-5-20250929" },
-  },
+  keys: {},
 }
 
 const RESET = "reset"
@@ -38,13 +34,20 @@ export function mergeConfig(raw: unknown): RouterConfig {
   return {
     sigil: typeof o.sigil === "string" && o.sigil.length > 0 ? o.sigil : defaultConfig.sigil,
     debug: o.debug === true,
-    keys: {
-      ...defaultConfig.keys,
-      ...(isRecord(o.keys) ? (o.keys as Record<string, ModelRef>) : {}),
-    },
+    keys: isRecord(o.keys) ? readKeys(o.keys) : {},
   }
 }
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === "object" && !Array.isArray(x)
+}
+
+function readKeys(input: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "string" && value.includes("/")) {
+      out[key] = value
+    }
+  }
+  return out
 }
