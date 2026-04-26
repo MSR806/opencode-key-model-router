@@ -1,9 +1,10 @@
 # Changelog
 
-## 0.1.0 — 2026-04-27
+## 0.1.1 — 2026-04-27
 
 Initial release.
 
+- Published under `@msr806/opencode-key-model-router` to avoid the existing `opencode-model-router` package name.
 - `chat.message` hook intercepts every user message
 - `@key` token anywhere in the message switches the session to the configured `provider/model`
 - The token is stripped before the message reaches the LLM

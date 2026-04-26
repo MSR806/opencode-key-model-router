@@ -1,6 +1,6 @@
 {
-  "name": "opencode-model-router",
-  "version": "0.1.0",
+  "name": "@msr806/opencode-key-model-router",
+  "version": "0.1.1",
   "description": "OpenCode plugin: prefix a message with @key to pick a model, strip the tag, and persist the choice for the session",
   "keywords": [
     "opencode",
@@ -10,13 +10,13 @@
     "router",
     "llm"
   ],
-  "homepage": "https://github.com/MSR806/opencode-model-router#readme",
+  "homepage": "https://github.com/MSR806/opencode-key-model-router#readme",
   "bugs": {
-    "url": "https://github.com/MSR806/opencode-model-router/issues"
+    "url": "https://github.com/MSR806/opencode-key-model-router/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MSR806/opencode-model-router.git"
+    "url": "git+https://github.com/MSR806/opencode-key-model-router.git"
   },
   "license": "MIT",
   "author": "MSR806",

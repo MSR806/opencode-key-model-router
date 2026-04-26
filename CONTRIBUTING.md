@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/MSR806/opencode-model-router.git
-cd opencode-model-router
+git clone https://github.com/MSR806/opencode-key-model-router.git
+cd opencode-key-model-router
 bun install
 ```
 
@@ -23,7 +23,7 @@ Add to `~/.config/opencode/opencode.json`:
 {
   "plugin": [
     [
-      "file:///path/to/opencode-model-router/dist/index.js",
+      "file:///path/to/opencode-key-model-router/dist/index.js",
       {
         "debug": true,
         "keys": {
